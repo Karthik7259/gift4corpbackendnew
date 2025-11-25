@@ -1,18 +1,27 @@
 import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
+import connectDB from './config/mongodb.js';
+import connectCloudinary from './config/cloudinary.js';
+import Userrouter from './routes/userRoute.js';
+import productRouter from './routes/productRoute.js';
 
 
 // app initialization
 
 const app=express();
 const port=process.env.PORT || 5000;
+connectDB();
+connectCloudinary();
 
 // middlewares
 app.use(cors());
 app.use(express.json());    
 
 
+// Use user routes
+app.use('/api/user', Userrouter);
+app.use('/api/product',productRouter);
 // api  endpoints
 
 
