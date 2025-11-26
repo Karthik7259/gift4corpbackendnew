@@ -94,6 +94,13 @@ const registerUser = async (req, res) => {
 // Route for adminLogin
 const adminLogin = async (req, res) => {
     // Logic for admin login
+
+
+
+
+
+
+    
 }   
 
 export { loginUser, registerUser ,adminLogin};

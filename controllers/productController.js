@@ -1,32 +1,71 @@
-
-
+import {v2 as cloudinary} from 'cloudinary';
+import productModel from '../models/productModel.js';
 // function for add product
 
 const addProduct = async (req, res) => {
-    // try {
-    //     const { name, description, price, image, category, subCategory, sizes, bestseller, colour } = req.body;
-    //     const newProduct = new ProductModel({
-    //         name,
-    //         description,                    
-    //         price,
-    //         image,
-    //         category,
-    //         subCategory,
-    //         sizes,
-    //         bestseller,
-    //         colour
-    //     });
-    //     const savedProduct = await newProduct.save();
-    //     res.status(201).json(savedProduct);
-    // } catch (error) {
-    //     res.status(400).json({ error: error.message });
-    // }
+   try{
+          const {name,description,price,category,subCategory,sizes,bestseller,colour} =req.body;
+
+          const image1=req.files.image1 && req.files.image1[0] ;
+          const image2=req.files.image2 && req.files.image2[0] ;
+          const image3=req.files.image3 && req.files.image3[0] ;
+          const image4=req.files.image4 && req.files.image4[0] ;
+
+
+          const images=[image1,image2,image3,image4].filter((item)=> item !== undefined);
+ 
+
+           let imagesUrl=await Promise.all(
+            images.map(async (item)=>{
+                let result=await cloudinary.uploader.upload(item.path,{resource_type:"image"});
+
+                return result.secure_url;
+            })
+           )
+
+
+           console.log(colour);
+          const productData = {
+            name,
+            description,
+            category,
+            subCategory,
+            sizes,
+            bestseller:bestseller === 'true' ? true : false,
+            colour:JSON.parse(colour.replace(/'/g, '"')),
+            price:Number(price),
+            sizes : JSON.parse(sizes.replace(/'/g, '"')),
+            image:imagesUrl,
+            date:Date.now(),
+          }
+
+
+
+          const newProduct = new productModel(productData);
+
+          await newProduct.save();
+          
+
+ res.json({success:true,message:"Product added successfully"})
+
+   }   catch(err){  
+             console.log(err);
+           res.status(500).json({error:"Internal server error"})
+    }
+
 };
 
 // function for get all products
 
 const listProducts = async (req, res) => {
-   
+    try{
+      const products=await productModel.find({});
+      res.json({success:true,products});
+
+    }catch(err){
+      console.log(err);
+      res.status(500).json({error:"Internal server error"})
+    }
 
 }
 
@@ -34,7 +73,16 @@ const listProducts = async (req, res) => {
 
 
 const removeProduct = async (req, res) => {
-   
+    try{
+
+        await productModel.findByIdAndDelete(req.body.id);
+         res.json({success:true,message:"Product removed"});
+    }catch(err){  
+        console.log(err); 
+
+      res.status(500).json({error:"Internal server error"}) 
+    }
+
 
 }
 
@@ -42,7 +90,19 @@ const removeProduct = async (req, res) => {
 
 const singleProduct=async(req,res)=>{
 
+  try{
+   const {productId}=req.body;
+   console.log(productId);
 
+   const product=await productModel.findById(productId);
+    res.json({success:true,product});
+
+  }catch(err){
+
+    console.log(err); 
+
+    res.status(500).json({error:"Internal server error"})
+  }
 
 }
 
