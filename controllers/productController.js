@@ -59,7 +59,7 @@ import productModel from '../models/ProductModel.js';
 
 const addProduct = async (req, res) => {
   try {
-    const { name, description, price, Mrpprice, category, subCategory, sizes, bestseller, collegeMerchandise, quantity } = req.body;
+    const { name, description, price, Mrpprice, category, subCategory, sizes, bestseller, collegeMerchandise, quantity, color } = req.body;
 
     const image1 = req.files.image1 && req.files.image1[0];
     const image2 = req.files.image2 && req.files.image2[0];
@@ -85,6 +85,7 @@ const addProduct = async (req, res) => {
       price: Number(price),
       Mrpprice: Number(Mrpprice),
       quantity: quantity ? Number(quantity) : 0,
+      color: color || '',
       image: imagesUrl,
       date: Date.now(),
     };
@@ -159,7 +160,7 @@ const singleProduct=async(req,res)=>{
 
 const updateProduct = async (req, res) => {
   try {
-    const { id, name, description, price, Mrpprice, category, subCategory, sizes, bestseller, collegeMerchandise, quantity } = req.body;
+    const { id, name, description, price, Mrpprice, category, subCategory, sizes, bestseller, collegeMerchandise, quantity, color } = req.body;
 
     // Find existing product
     const existingProduct = await productModel.findById(id);
@@ -199,6 +200,7 @@ const updateProduct = async (req, res) => {
       price: price ? Number(price) : existingProduct.price,
       Mrpprice: Mrpprice ? Number(Mrpprice) : existingProduct.Mrpprice,
       quantity: quantity !== undefined ? Number(quantity) : existingProduct.quantity,
+      color: color || existingProduct.color,
       image: imagesUrl,
     };
 

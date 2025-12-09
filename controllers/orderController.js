@@ -1,5 +1,6 @@
 import orderModel from "../models/OrderModel.js";
 import userModel from "../models/userModel.js";
+import productModel from "../models/ProductModel.js";
 import razorpay from "razorpay";
 import sendEmail from "../service/sendEmail.js";
 // placing orders using COD METHOD
@@ -39,7 +40,12 @@ try{
  const newOrder=new orderModel(orderData);
     await newOrder.save();
 
-
+    // Decrease product stock for each item
+    for(const item of items){
+        await productModel.findByIdAndUpdate(item._id, {
+            $inc: { quantity: -item.quantity }
+        });
+    }
 
     await userModel.findByIdAndUpdate(userId,{cartData:{}})
 
@@ -139,13 +145,23 @@ const verifyRazor=async(req,res)=>{
                 await userModel.findByIdAndUpdate(userId,{cartData:{}});
             }
             
+            // Decrease product stock for each item in the order
+            const order = await orderModel.findById(orderInfo.receipt);
+            if(order && order.items){
+                for(const item of order.items){
+                    await productModel.findByIdAndUpdate(item._id, {
+                        $inc: { quantity: -item.quantity }
+                    });
+                }
+            }
+            
             // Send payment confirmation email
             try {
-                const order = await orderModel.findById(orderInfo.receipt).populate('items');
+                const orderWithItems = await orderModel.findById(orderInfo.receipt).populate('items');
                 const user = await userModel.findById(userId);
                 
                 if(user && user.email) {
-                    const itemsHtml = order.items.map(item => `
+                    const itemsHtml = orderWithItems.items.map(item => `
                         <tr>
                             <td style="padding: 10px; border-bottom: 1px solid #ddd;">${item.name || 'Product'}</td>
                             <td style="padding: 10px; border-bottom: 1px solid #ddd;">${item.size || 'N/A'}</td>
@@ -161,9 +177,9 @@ const verifyRazor=async(req,res)=>{
                             <p>Your payment has been successfully processed. Thank you for your order!</p>
                             
                             <h3>Order Details:</h3>
-                            <p><strong>Order ID:</strong> ${order._id}</p>
-                            <p><strong>Payment Method:</strong> ${order.paymentMethod}</p>
-                            <p><strong>Order Date:</strong> ${new Date(order.date).toLocaleDateString()}</p>
+                            <p><strong>Order ID:</strong> ${orderWithItems._id}</p>
+                            <p><strong>Payment Method:</strong> ${orderWithItems.paymentMethod}</p>
+                            <p><strong>Order Date:</strong> ${new Date(orderWithItems.date).toLocaleDateString()}</p>
                             
                             <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
                                 <thead>
@@ -179,14 +195,14 @@ const verifyRazor=async(req,res)=>{
                                 </tbody>
                             </table>
                             
-                            <p><strong>Total Amount:</strong> ₹${order.amount}</p>
+                            <p><strong>Total Amount:</strong> ₹${orderWithItems.amount}</p>
                             
                             <h3>Shipping Address:</h3>
                             <p>
-                                ${order.address.firstName} ${order.address.lastName}<br>
-                                ${order.address.street}<br>
-                                ${order.address.city}, ${order.address.state} - ${order.address.zipcode}<br>
-                                Phone: ${order.address.phone}
+                                ${orderWithItems.address.firstName} ${orderWithItems.address.lastName}<br>
+                                ${orderWithItems.address.street}<br>
+                                ${orderWithItems.address.city}, ${orderWithItems.address.state} - ${orderWithItems.address.zipcode}<br>
+                                Phone: ${orderWithItems.address.phone}
                             </p>
                             
                             <p style="margin-top: 30px;">We'll notify you once your order is shipped.</p>
@@ -196,7 +212,7 @@ const verifyRazor=async(req,res)=>{
                     
                     await sendEmail({
                         sendTo: user.email,
-                        subject: 'Payment Confirmed - Order #' + order._id,
+                        subject: 'Payment Confirmed - Order #' + orderWithItems._id,
                         html: emailHtml
                     });
                 }
