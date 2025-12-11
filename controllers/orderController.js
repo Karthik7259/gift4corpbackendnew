@@ -18,13 +18,30 @@ const razorpayInstance =new razorpay({
 })
 const placeOrder=async(req,res)=>{
 
-
-
     
 try{
 
+    console.log('Place Order Request:', {
+        hasUserId: !!req.body.userId,
+        itemsCount: req.body.items?.length,
+        amount: req.body.amount,
+        shippingFee: req.body.shippingFee,
+        address: req.body.address ? 'present' : 'missing'
+    });
 
     const {userId,items,amount,address,shippingFee}=req.body;
+    
+    if(!userId) {
+        return res.status(400).json({success:false,message:'User ID is required'});
+    }
+    
+    if(!items || items.length === 0) {
+        return res.status(400).json({success:false,message:'Order must contain at least one item'});
+    }
+    
+    if(!address) {
+        return res.status(400).json({success:false,message:'Delivery address is required'});
+    }
     
     // First, validate all items have sufficient stock
     for(const item of items){
@@ -61,6 +78,8 @@ try{
 
     await userModel.findByIdAndUpdate(userId,{cartData:{}})
 
+    console.log('Order created successfully, attempting Shiprocket integration...');
+
     // Create Shiprocket shipment (async - don't block order placement)
     try {
         const shiprocketData = await createCompleteOrder({
@@ -74,24 +93,31 @@ try{
             }
         });
         
+        console.log('Shiprocket response:', shiprocketData?.success ? 'success' : 'failed');
+        
         if(shiprocketData.success && shiprocketData.data) {
             await orderModel.findByIdAndUpdate(newOrder._id, {
                 shiprocket_order_id: shiprocketData.data.order_id,
                 shipment_id: shiprocketData.data.shipment_id
             });
+            console.log('Shiprocket order linked to database order');
         }
     } catch (shiprocketErr) {
-        console.error('Shiprocket error (non-blocking):', shiprocketErr);
+        console.error('Shiprocket error (non-blocking):', {
+            message: shiprocketErr.message,
+            response: shiprocketErr.response?.data
+        });
         // Don't fail the order if Shiprocket fails
     }
 
+    console.log('Order placement completed successfully');
     res.json({success:true,message:"Order Placed "});
 
 
 
 }catch(err){        
-    console.log(err);
-    res.status(500).json({success:false,error:err.message});    
+    console.error('Place Order Error:', err);
+    res.status(500).json({success:false,message:err.message || 'Failed to place order'});    
 
 }
 
@@ -104,8 +130,8 @@ try{
 
 
 }catch(err){        
-    console.log(err);
-    res.status(500).json({success:false,error:err.message});    
+    console.error('Stripe Order Error:', err);
+    res.status(500).json({success:false,message:err.message || 'Failed to create Stripe order'});    
 
 }
 
@@ -116,8 +142,16 @@ const placeOrderRazorpay=async(req,res)=>{
     
 try{
 
-    const {userId,items,amount,address}=req.body;
+    const {userId,items,amount,address,shippingFee}=req.body;
     const {origin}=req.headers;
+
+    if(!userId) {
+        return res.status(400).json({success:false,message:'User ID is required'});
+    }
+    
+    if(!items || items.length === 0) {
+        return res.status(400).json({success:false,message:'Order must contain at least one item'});
+    }
 
     const orderData={
         userId,
@@ -127,33 +161,37 @@ try{
         paymentMethod:"Razorpay",
         payment:false,
         date:Date.now(),
+        shippingFee: shippingFee || 100
     }
     const newOrder=new orderModel(orderData);
     await newOrder.save();
 
-     const options={
+    console.log('Razorpay order created in DB, creating Razorpay payment order...');
+
+    const options={
         amount:amount*100,
         currency:currency.toUpperCase(),
         receipt:newOrder._id.toString(),
-     }
+    }
 
-     await razorpayInstance.orders.create(options,(err,order)=>{
-
-        if(err){
-           console.log(err);
-              return res.status(500).json({success:false,message:err.message});
-        }
-
-        res.json({success:true,order})
-
-
-     })
+    // Use promisified version instead of callback
+    try {
+        const order = await razorpayInstance.orders.create(options);
+        console.log('Razorpay payment order created:', order.id);
+        res.json({success:true, order});
+    } catch(razorpayErr) {
+        console.error('Razorpay API error:', razorpayErr);
+        return res.status(500).json({
+            success:false, 
+            message: razorpayErr.error?.description || razorpayErr.message || 'Failed to create Razorpay payment order'
+        });
+    }
 
     
 
 }catch(err){        
-    console.log(err);
-    res.status(500).json({success:false,error:err.message});    
+    console.error('Razorpay Order Error:', err);
+    res.status(500).json({success:false,message:err.message || 'Failed to create Razorpay order'});    
 
 }
 
@@ -289,8 +327,8 @@ const verifyRazor=async(req,res)=>{
          }
 
      }catch(err){
-        console.log(err);
-        res.status(500).json({success:false,error:err.message});    
+        console.error('Verify Razorpay Error:', err);
+        res.status(500).json({success:false,message:err.message || 'Payment verification failed'});
      }
 }
 
