@@ -59,7 +59,7 @@ import productModel from '../models/ProductModel.js';
 
 const addProduct = async (req, res) => {
   try {
-    const { name, description, price, Mrpprice, category, subCategory, sizes, bestseller, collegeMerchandise, quantity, color, weight, length, breadth, height } = req.body;
+    const { name, description, price, Mrpprice, category, subCategory, sizes, bestseller, collegeMerchandise, quantity, color, weight, length, breadth, height, brand, useSizeVariants, sizeVariants } = req.body;
 
     const image1 = req.files.image1 && req.files.image1[0];
     const image2 = req.files.image2 && req.files.image2[0];
@@ -86,6 +86,7 @@ const addProduct = async (req, res) => {
       Mrpprice: Number(Mrpprice),
       quantity: quantity ? Number(quantity) : 0,
       color: color || '',
+      brand: brand || '',
       image: imagesUrl,
       date: Date.now(),
     };
@@ -99,6 +100,17 @@ const addProduct = async (req, res) => {
     // Add sizes only when product has size
     if (sizes) {
       productData.sizes = JSON.parse(sizes.replace(/'/g, '"'));
+    }
+
+    // Add size variants if using different pricing for sizes
+    if (useSizeVariants === 'true' && sizeVariants) {
+      const parsedVariants = JSON.parse(sizeVariants);
+      productData.sizeVariants = parsedVariants.map(v => ({
+        size: v.size,
+        price: Number(v.price),
+        mrpPrice: Number(v.mrpPrice),
+        quantity: Number(v.quantity)
+      }));
     }
 
     const newProduct = new productModel(productData);
@@ -166,7 +178,7 @@ const singleProduct=async(req,res)=>{
 
 const updateProduct = async (req, res) => {
   try {
-    const { id, name, description, price, Mrpprice, category, subCategory, sizes, bestseller, collegeMerchandise, quantity, color } = req.body;
+    const { id, name, description, price, Mrpprice, category, subCategory, sizes, bestseller, collegeMerchandise, quantity, color, brand, useSizeVariants, sizeVariants } = req.body;
 
     // Find existing product
     const existingProduct = await productModel.findById(id);
@@ -207,12 +219,27 @@ const updateProduct = async (req, res) => {
       Mrpprice: Mrpprice ? Number(Mrpprice) : existingProduct.Mrpprice,
       quantity: quantity !== undefined ? Number(quantity) : existingProduct.quantity,
       color: color || existingProduct.color,
+      brand: brand || existingProduct.brand,
       image: imagesUrl,
     };
 
     // Add sizes only when product has size
     if (sizes) {
       updateData.sizes = typeof sizes === 'string' ? JSON.parse(sizes.replace(/'/g, '"')) : sizes;
+    }
+
+    // Handle size variants
+    if (useSizeVariants === 'true' && sizeVariants) {
+      const parsedVariants = typeof sizeVariants === 'string' ? JSON.parse(sizeVariants) : sizeVariants;
+      updateData.sizeVariants = parsedVariants.map(v => ({
+        size: v.size,
+        price: Number(v.price),
+        mrpPrice: Number(v.mrpPrice),
+        quantity: Number(v.quantity)
+      }));
+    } else if (useSizeVariants === 'false') {
+      // Clear size variants if disabled
+      updateData.sizeVariants = [];
     }
 
     // Update product

@@ -9,6 +9,7 @@ import cartRouter from './routes/cartRoute.js';
 import OrderRouter from './routes/orderRoute.js';
 import collegeMerchandiseRouter from './routes/collegeMerchandiseRoute.js';
 import shiprocketRouter from './routes/shiprocketRoute.js';
+import categoryRouter from './routes/categoryRoute.js';
 
 // app initialization
 
@@ -34,6 +35,7 @@ app.use('/api/cart',cartRouter);
 app.use('/api/order',OrderRouter);
 app.use('/api/college-merchandise',collegeMerchandiseRouter);
 app.use('/api/shipping',shiprocketRouter); // Changed from /api/shiprocket to avoid blocking
+app.use('/api/category',categoryRouter);
 
 // api  endpoints
 

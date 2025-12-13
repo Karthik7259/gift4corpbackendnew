@@ -49,8 +49,21 @@ try{
         if(!product){
             return res.status(400).json({success:false,message:`Product ${item.name} not found`});
         }
-        if(product.quantity < item.quantity){
-            return res.status(400).json({success:false,message:`Insufficient stock for ${product.name}. Only ${product.quantity} available.`});
+        
+        // Check size-specific stock if product has size variants
+        if(product.sizeVariants && product.sizeVariants.length > 0){
+            const sizeVariant = product.sizeVariants.find(v => v.size === item.size);
+            if(!sizeVariant){
+                return res.status(400).json({success:false,message:`Size ${item.size} not available for ${product.name}`});
+            }
+            if(sizeVariant.quantity < item.quantity){
+                return res.status(400).json({success:false,message:`Insufficient stock for ${product.name} (Size ${item.size}). Only ${sizeVariant.quantity} available.`});
+            }
+        } else {
+            // Check overall product stock
+            if(product.quantity < item.quantity){
+                return res.status(400).json({success:false,message:`Insufficient stock for ${product.name}. Only ${product.quantity} available.`});
+            }
         }
     }
 
@@ -71,9 +84,22 @@ try{
 
     // Decrease product stock for each item
     for(const item of items){
-        await productModel.findByIdAndUpdate(item._id, {
-            $inc: { quantity: -item.quantity }
-        });
+        const product = await productModel.findById(item._id);
+        
+        // Update size-specific stock if product has size variants
+        if(product.sizeVariants && product.sizeVariants.length > 0){
+            // Find and update the specific size variant
+            const sizeVariantIndex = product.sizeVariants.findIndex(v => v.size === item.size);
+            if(sizeVariantIndex !== -1){
+                product.sizeVariants[sizeVariantIndex].quantity -= item.quantity;
+                await product.save();
+            }
+        } else {
+            // Update overall product stock
+            await productModel.findByIdAndUpdate(item._id, {
+                $inc: { quantity: -item.quantity }
+            });
+        }
     }
 
     await userModel.findByIdAndUpdate(userId,{cartData:{}})
@@ -231,9 +257,23 @@ const verifyRazor=async(req,res)=>{
             const order = await orderModel.findById(orderInfo.receipt);
             if(order && order.items){
                 for(const item of order.items){
-                    await productModel.findByIdAndUpdate(item._id, {
-                        $inc: { quantity: -item.quantity }
-                    });
+                    const product = await productModel.findById(item._id);
+                    
+                    if(product){
+                        // Update size-specific stock if product has size variants
+                        if(product.sizeVariants && product.sizeVariants.length > 0){
+                            const sizeVariantIndex = product.sizeVariants.findIndex(v => v.size === item.size);
+                            if(sizeVariantIndex !== -1){
+                                product.sizeVariants[sizeVariantIndex].quantity -= item.quantity;
+                                await product.save();
+                            }
+                        } else {
+                            // Update overall product stock
+                            await productModel.findByIdAndUpdate(item._id, {
+                                $inc: { quantity: -item.quantity }
+                            });
+                        }
+                    }
                 }
             }
             

@@ -35,6 +35,11 @@ const productSchema = new mongoose.Schema(
         type:Array,
         required:true,
       },
+      sizeVariants:{
+        type: Array,
+        default: [],
+        // Each element: { size: String, price: Number, mrpPrice: Number, quantity: Number }
+      },
       quantity:{
         type:Number,
         default:0,
