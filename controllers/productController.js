@@ -178,7 +178,7 @@ const singleProduct=async(req,res)=>{
 
 const updateProduct = async (req, res) => {
   try {
-    const { id, name, description, price, Mrpprice, category, subCategory, sizes, bestseller, collegeMerchandise, quantity, color, brand, useSizeVariants, sizeVariants } = req.body;
+    const { id, name, description, price, Mrpprice, category, subCategory, sizes, bestseller, collegeMerchandise, quantity, color, brand, useSizeVariants, sizeVariants, deletedImages } = req.body;
 
     // Find existing product
     const existingProduct = await productModel.findById(id);
@@ -187,24 +187,40 @@ const updateProduct = async (req, res) => {
     }
 
     // Handle image uploads if new images are provided
-    let imagesUrl = existingProduct.image; // Keep existing images by default
+    let imagesUrl = [...existingProduct.image]; // Copy existing images
 
-    if (req.files && Object.keys(req.files).length > 0) {
-      const image1 = req.files.image1 && req.files.image1[0];
-      const image2 = req.files.image2 && req.files.image2[0];
-      const image3 = req.files.image3 && req.files.image3[0];
-      const image4 = req.files.image4 && req.files.image4[0];
-
-      const images = [image1, image2, image3, image4].filter(i => i);
-
-      if (images.length > 0) {
-        imagesUrl = await Promise.all(
-          images.map(async (item) => {
-            let result = await cloudinary.uploader.upload(item.path, { resource_type: "image" });
-            return result.secure_url;
-          })
-        );
+    // Handle deletedImages (indices)
+    let deletedIndices = [];
+    if (deletedImages) {
+      try {
+        deletedIndices = JSON.parse(deletedImages);
+      } catch (e) {
+        deletedIndices = Array.isArray(deletedImages) ? deletedImages : [];
       }
+    }
+    // Remove images at specified indices
+    if (deletedIndices.length > 0) {
+      // Sort descending to avoid index shift
+      deletedIndices.sort((a, b) => b - a);
+      for (const idx of deletedIndices) {
+        if (imagesUrl[idx] !== undefined) {
+          imagesUrl.splice(idx, 1);
+        }
+      }
+    }
+
+    // Handle new image uploads (replace at index)
+    if (req.files && Object.keys(req.files).length > 0) {
+      for (let i = 1; i <= 4; i++) {
+        const imageFile = req.files[`image${i}`] && req.files[`image${i}`][0];
+        if (imageFile) {
+          let result = await cloudinary.uploader.upload(imageFile.path, { resource_type: "image" });
+          // Replace image at index (i-1), or add if not present
+          imagesUrl[i - 1] = result.secure_url;
+        }
+      }
+      // Remove any undefined holes if images were deleted and not replaced
+      imagesUrl = imagesUrl.filter(Boolean);
     }
 
     // Prepare update data

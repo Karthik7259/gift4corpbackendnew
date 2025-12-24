@@ -5,7 +5,7 @@ import orderModel from '../models/OrderModel.js';
 export const checkServiceability = async (req, res) => {
     try {
         const { pickup_postcode, delivery_postcode, weight, cod } = req.body;
-
+       
         const client = await createShiprocketClient();
         
         const response = await client.get('/courier/serviceability/', {
