@@ -23,6 +23,7 @@ connectCloudinary();
 // middlewares
 app.use(cors({
     origin: [
+        'http://localhost:5174',
         'https://yourcampusmerch.com',
         'https://gift4corp-admin.vercel.app'
     ],
