@@ -1,4 +1,4 @@
-import { createShiprocketClient } from '../config/shiprocket.js';
+import { createShiprocketClient, SHIPROCKET_PICKUP_LOCATION } from '../config/shiprocket.js';
 import orderModel from '../models/OrderModel.js';
 
 // 1. Check serviceability and get shipping charges
@@ -249,11 +249,19 @@ export const createCompleteOrder = async (req) => {
             const gstAmount = priceWithoutGST * gstRate;
             const priceIncludingGST = priceWithoutGST + gstAmount;
             
-            // Create unique SKU by combining product ID with size and index
-            // This prevents "SKU cannot be repeated" error
-            const uniqueSku = item.size && item.size !== 'default' 
-                ? `${item._id}-${item.size}` 
-                : `${item._id}-${index}`;
+            // Order line items may use _id, productId, or id (stored cart shape)
+            const productKey =
+                item._id != null
+                    ? String(item._id)
+                    : item.productId != null
+                      ? String(item.productId)
+                      : item.id != null
+                        ? String(item.id)
+                        : `line-${index}`;
+            const uniqueSku =
+                item.size && item.size !== 'default'
+                    ? `${productKey}-${item.size}`
+                    : `${productKey}-${index}`;
             
             // Add size to product name if it exists and is not 'default'
             const productName = item.size && item.size !== 'default'
@@ -328,7 +336,7 @@ export const createCompleteOrder = async (req) => {
         const shiprocketOrderData = {
             order_id: orderId.toString(),
             order_date: new Date().toISOString().split('T')[0],
-            pickup_location: "work", // Your Shiprocket pickup location name
+            pickup_location: SHIPROCKET_PICKUP_LOCATION,
             channel_id: "",
             comment: "YourCampusMerch Order",
             billing_customer_name: address.firstName || 'Customer',
@@ -410,6 +418,23 @@ export const createCompleteOrder = async (req) => {
     }
 };
 
+/** Resolve Shiprocket's numeric order id for DB lookup (shiprocket_order_id is Number). */
+function resolveShiprocketOrderId(webhookData) {
+    const sr = webhookData.sr_order_id;
+    if (sr != null && sr !== '') {
+        const n = Number(sr);
+        if (Number.isFinite(n)) return n;
+    }
+    const oid = webhookData.order_id ?? webhookData.order?.order_id;
+    if (oid == null) return null;
+    if (typeof oid === 'number' && Number.isFinite(oid)) return oid;
+    if (typeof oid === 'string') {
+        const t = oid.trim();
+        if (/^\d+$/.test(t)) return Number(t);
+    }
+    return null;
+}
+
 // Webhook handler for Shiprocket status updates
 export const shiprocketWebhook = async (req, res) => {
     try {
@@ -417,15 +442,14 @@ export const shiprocketWebhook = async (req, res) => {
         
         const webhookData = req.body;
         
-        // Extract order ID and status from webhook
-        // Shiprocket sends different formats, handle both
-        const orderId = webhookData.order_id || webhookData.order?.order_id;
+        // Prefer sr_order_id — order_id may be channel/merchant ref (string). Never query Number field with arbitrary strings.
+        const orderId = resolveShiprocketOrderId(webhookData);
         const currentStatus = webhookData.current_status || webhookData.status;
         const awbCode = webhookData.awb_code || webhookData.awb;
         
-        if (!orderId) {
-            console.log('No order ID found in webhook');
-            return res.status(200).json({ success: true, message: 'No order ID' });
+        if (orderId == null) {
+            console.log('No numeric Shiprocket order id (sr_order_id / numeric order_id) in webhook; skipping DB lookup');
+            return res.status(200).json({ success: true, message: 'No usable Shiprocket order id' });
         }
         
         // Find order in database by shiprocket_order_id

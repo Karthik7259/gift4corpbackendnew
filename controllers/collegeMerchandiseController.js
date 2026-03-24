@@ -25,10 +25,14 @@ const addCollegeMerchandise = async (req, res) => {
     }
 };
 
-// Get all college merchandise
+// Get all college merchandise (active only; treat missing isActive as active for legacy docs)
 const listCollegeMerchandise = async (req, res) => {
     try {
-        const merchandises = await collegeMerchandiseModel.find({ isActive: true }).sort({ createdAt: -1 });
+        const merchandises = await collegeMerchandiseModel
+            .find({
+                $or: [{ isActive: true }, { isActive: { $exists: false } }],
+            })
+            .sort({ createdAt: -1 });
         res.json({ success: true, merchandises });
     } catch (err) {
         console.log(err);

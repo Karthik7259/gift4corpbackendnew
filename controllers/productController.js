@@ -61,12 +61,11 @@ const addProduct = async (req, res) => {
   try {
     const { name, description, price, Mrpprice, category, subCategory, sizes, bestseller, collegeMerchandise, quantity, color, weight, length, breadth, height, brand, useSizeVariants, sizeVariants } = req.body;
 
-    const image1 = req.files.image1 && req.files.image1[0];
-    const image2 = req.files.image2 && req.files.image2[0];
-    const image3 = req.files.image3 && req.files.image3[0];
-    const image4 = req.files.image4 && req.files.image4[0];
-
-    const images = [image1, image2, image3, image4].filter(i => i);
+    const files = req.files || {};
+    const imageSlots = [1, 2, 3, 4, 5, 6].map(
+      (n) => files[`image${n}`] && files[`image${n}`][0]
+    );
+    const images = imageSlots.filter(Boolean);
 
     let imagesUrl = await Promise.all(
       images.map(async (item) => {
@@ -211,7 +210,7 @@ const updateProduct = async (req, res) => {
 
     // Handle new image uploads (replace at index)
     if (req.files && Object.keys(req.files).length > 0) {
-      for (let i = 1; i <= 4; i++) {
+      for (let i = 1; i <= 6; i++) {
         const imageFile = req.files[`image${i}`] && req.files[`image${i}`][0];
         if (imageFile) {
           let result = await cloudinary.uploader.upload(imageFile.path, { resource_type: "image" });

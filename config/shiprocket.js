@@ -6,6 +6,10 @@ const SHIPROCKET_BASE_URL = 'https://apiv2.shiprocket.in/v1/external';
 const SHIPROCKET_EMAIL = process.env.SHIPROCKET_EMAIL;
 const SHIPROCKET_PASSWORD = process.env.SHIPROCKET_PASSWORD;
 
+/** Must match the pickup location *name* in Shiprocket → Settings → Pickup Addresses (e.g. Home-1). */
+export const SHIPROCKET_PICKUP_LOCATION =
+    process.env.SHIPROCKET_PICKUP_LOCATION || 'Home-1';
+
 let authToken = null;
 let tokenExpiry = null;
 
@@ -53,5 +57,6 @@ export const createShiprocketClient = async () => {
 export default {
     getShiprocketToken,
     createShiprocketClient,
-    SHIPROCKET_BASE_URL
+    SHIPROCKET_BASE_URL,
+    SHIPROCKET_PICKUP_LOCATION
 };
