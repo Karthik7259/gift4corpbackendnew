@@ -1,5 +1,13 @@
 import { createShiprocketClient, SHIPROCKET_PICKUP_LOCATION } from '../config/shiprocket.js';
 import orderModel from '../models/OrderModel.js';
+import productModel from '../models/ProductModel.js';
+
+/** Matches catalog category for apparel (5% GST). */
+function isApparelCategory(category) {
+    if (!category || typeof category !== 'string') return false;
+    const c = category.trim().toLowerCase();
+    return c === 'apparels' || c === 'apparel';
+}
 
 // 1. Check serviceability and get shipping charges
 export const checkServiceability = async (req, res) => {
@@ -236,16 +244,30 @@ export const createCompleteOrder = async (req) => {
         console.log('Items:', items.length, 'Address:', address.city, 'Shipping Fee:', shippingFee);
         
         const client = await createShiprocketClient();
+
+        // Ensure category is present (older payloads used productId without category)
+        const itemsWithCategory = await Promise.all(
+            items.map(async (item) => {
+                let category = item.category;
+                if (!category) {
+                    const pid = item._id ?? item.productId;
+                    if (pid) {
+                        const p = await productModel.findById(pid).select('category').lean();
+                        if (p?.category) category = p.category;
+                    }
+                }
+                return { ...item, category };
+            })
+        );
         
-        // Format order items for Shiprocket
-        const orderItems = items.map((item, index) => {
+        // Format order items for Shiprocket — tax-inclusive unit price in selling_price, tax: 0
+        // (no separate GST fields to Shiprocket; sub_total matches what the customer paid for goods)
+        const orderItems = itemsWithCategory.map((item, index) => {
             const quantity = parseInt(item.quantity) || 1;
             const priceWithoutGST = parseFloat(item.price) || 0;
             
-            // Calculate GST based on category
-            // Apparels: 5% GST (2.5% CGST + 2.5% SGST)
-            // Others: 18% GST (9% CGST + 9% SGST)
-            const gstRate = item.category === 'Apparels' ? 0.05 : 0.18;
+            // Apparels: 5% GST; other categories: 18%
+            const gstRate = isApparelCategory(item.category) ? 0.05 : 0.18;
             const gstAmount = priceWithoutGST * gstRate;
             const priceIncludingGST = priceWithoutGST + gstAmount;
             
@@ -277,7 +299,7 @@ export const createCompleteOrder = async (req) => {
                 selling_price: parseFloat(priceIncludingGST.toFixed(2)),
                 discount: 0,
                 tax: 0,
-                hsn: item.category === 'Apparels' ? 6109 : 4901 // Common HSN codes
+                hsn: isApparelCategory(item.category) ? 6109 : 4901 // Common HSN codes
             };
         });
         
@@ -287,7 +309,7 @@ export const createCompleteOrder = async (req) => {
         let maxBreadth = 0;
         let totalHeight = 0;
         
-        items.forEach(item => {
+        itemsWithCategory.forEach(item => {
             const quantity = parseInt(item.quantity) || 1;
             // Weight in kg (product weight is in grams, convert to kg)
             const itemWeight = (item.weight || 400) / 1000;

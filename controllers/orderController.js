@@ -396,14 +396,14 @@ const allOrders=async(req,res)=>{
 // user order Data for frontend 
 const userOrders=async(req,res)=>{
     try{
-      
+      const userId = req.body?.userId || req.userId;
+      if (!userId) {
+        return res.status(400).json({ success: false, error: 'User ID required' });
+      }
 
-      const {userId}=req.body;
+      const orders = await orderModel.find({ userId });
 
-      const orders=await orderModel.find({userId});  
-      
-       res.json({success:true,orders});
-
+      res.json({ success: true, orders });
     }catch(err){
         console.log(err);
         res.status(500).json({success:false,error:err.message});    
