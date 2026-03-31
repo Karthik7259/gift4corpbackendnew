@@ -9,6 +9,9 @@ const orderSchema = new mongoose.Schema({
     status: {type:String,required:true,default:"Order Placed"},
     paymentMethod: {type:String,required:true},
     payment: {type:Boolean,required:true,default:false},
+    /** Set when Razorpay payment succeeds — used for refunds */
+    razorpay_order_id: {type:String},
+    razorpay_payment_id: {type:String},
     date: {type:Number,required:true},
     shippingFee: {type:Number,default:100},
     // Shiprocket shipping fields

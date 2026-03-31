@@ -235,7 +235,7 @@ const verifyRazor=async(req,res)=>{
      try{
 
         const {response}=req.body;
-        const {razorpay_order_id} = response ;
+        const {razorpay_order_id, razorpay_payment_id} = response || {};
 
         console.log("Verify Razorpay request:", req.body);
 
@@ -247,7 +247,11 @@ const verifyRazor=async(req,res)=>{
         console.log("Order Info:", orderInfo);
         
          if(orderInfo.status==="paid"){
-            await orderModel.findByIdAndUpdate(orderInfo.receipt,{payment:true});
+            await orderModel.findByIdAndUpdate(orderInfo.receipt,{
+                payment:true,
+                ...(razorpay_order_id && { razorpay_order_id }),
+                ...(razorpay_payment_id && { razorpay_payment_id }),
+            });
             const userId = req.body.userId || req.userId;
             if(userId){
                 await userModel.findByIdAndUpdate(userId,{cartData:{}});
@@ -257,7 +261,7 @@ const verifyRazor=async(req,res)=>{
             const order = await orderModel.findById(orderInfo.receipt);
             if(order && order.items){
                 for(const item of order.items){
-                    const product = await productModel.findById(item._id);
+                    const product = await productModel.findById(item._id || item.productId);
                     
                     if(product){
                         // Update size-specific stock if product has size variants
@@ -269,7 +273,8 @@ const verifyRazor=async(req,res)=>{
                             }
                         } else {
                             // Update overall product stock
-                            await productModel.findByIdAndUpdate(item._id, {
+                            const pid = item._id || item.productId;
+                            await productModel.findByIdAndUpdate(pid, {
                                 $inc: { quantity: -item.quantity }
                             });
                         }
@@ -790,6 +795,87 @@ const updateStatus=async(req,res)=>{
 }
 
 
+/** Restore inventory when an order is removed after stock was deducted. */
+async function restoreProductStockForOrder(order) {
+    for (const item of order.items || []) {
+        const pid = item._id || item.productId;
+        if (!pid) continue;
+        const product = await productModel.findById(pid);
+        if (!product) continue;
+        if (product.sizeVariants && product.sizeVariants.length > 0) {
+            const sizeVariantIndex = product.sizeVariants.findIndex(v => v.size === item.size);
+            if (sizeVariantIndex !== -1) {
+                product.sizeVariants[sizeVariantIndex].quantity += item.quantity;
+                await product.save();
+            }
+        } else {
+            await productModel.findByIdAndUpdate(pid, { $inc: { quantity: item.quantity } });
+        }
+    }
+}
+
+function shouldRestoreStockForDeletedOrder(order) {
+    if (order.paymentMethod === 'COD') return true;
+    if (order.paymentMethod === 'Razorpay' && order.payment === true) return true;
+    return false;
+}
+
+const deleteOrder = async (req, res) => {
+    try {
+        const { orderId } = req.body;
+        if (!orderId) {
+            return res.status(400).json({ success: false, message: 'Order ID is required' });
+        }
+        const order = await orderModel.findById(orderId);
+        if (!order) {
+            return res.status(404).json({ success: false, message: 'Order not found' });
+        }
+
+        // No Razorpay / Shiprocket calls — only DB + internal inventory
+        if (shouldRestoreStockForDeletedOrder(order)) {
+            await restoreProductStockForOrder(order);
+        }
+
+        await orderModel.findByIdAndDelete(orderId);
+        res.json({
+            success: true,
+            message: 'Order removed from dashboard',
+        });
+    } catch (err) {
+        console.error('deleteOrder:', err);
+        res.status(500).json({ success: false, message: err.message || 'Failed to delete order' });
+    }
+};
+
+/** Admin: set `payment` to true (paid) or false (pending). */
+const updatePaymentStatus = async (req, res) => {
+    try {
+        const { orderId, payment } = req.body;
+        if (!orderId) {
+            return res.status(400).json({ success: false, message: 'orderId is required' });
+        }
+        if (typeof payment !== 'boolean') {
+            return res.status(400).json({
+                success: false,
+                message: 'payment must be a boolean: true for paid, false for pending',
+            });
+        }
+        const order = await orderModel.findById(orderId);
+        if (!order) {
+            return res.status(404).json({ success: false, message: 'Order not found' });
+        }
+        await orderModel.findByIdAndUpdate(orderId, { payment });
+        res.json({
+            success: true,
+            message: payment ? 'Payment status: paid' : 'Payment status: pending',
+            payment,
+        });
+    } catch (err) {
+        console.error('updatePaymentStatus:', err);
+        res.status(500).json({ success: false, message: err.message || 'Failed to update payment status' });
+    }
+};
+
 // Get order tracking details
 const getOrderTracking = async(req,res) => {
     try {
@@ -821,4 +907,4 @@ const getOrderTracking = async(req,res) => {
 }
 
 
-export {placeOrder,placeOrderStripe,placeOrderRazorpay,allOrders,userOrders,updateStatus,verifyRazor,getOrderTracking};
+export {placeOrder,placeOrderStripe,placeOrderRazorpay,allOrders,userOrders,updateStatus,verifyRazor,getOrderTracking,deleteOrder,updatePaymentStatus};

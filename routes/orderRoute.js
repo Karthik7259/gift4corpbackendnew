@@ -1,6 +1,6 @@
 import express from 'express';
 
-import {placeOrder,placeOrderStripe,placeOrderRazorpay,allOrders,userOrders,updateStatus, verifyRazor, getOrderTracking} from '../controllers/orderController.js';
+import {placeOrder,placeOrderStripe,placeOrderRazorpay,allOrders,userOrders,updateStatus, verifyRazor, getOrderTracking, deleteOrder, updatePaymentStatus} from '../controllers/orderController.js';
 import adminAuth from '../middleware/adminAuth.js';
 import authuser from '../middleware/auth.js';
 
@@ -9,6 +9,8 @@ const OrderRouter=express.Router();
 // Admin Features
 OrderRouter.post('/list',adminAuth,allOrders);
 OrderRouter.put('/status',adminAuth,updateStatus);
+OrderRouter.post('/delete',adminAuth,deleteOrder);
+OrderRouter.put('/payment-status',adminAuth,updatePaymentStatus);
 
 
 // payment Features
